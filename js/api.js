@@ -6,7 +6,7 @@
 // POST → api.post('action', { payload })
 // =================================================================
 
-const GAS_URL = 'YOUR_GAS_WEB_APP_URL_HERE';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwkB2fznWL9B7ryUKLbEE_ceoyDIjIhW5iQSd2rM53hj2T0a2pf6jiPmnU6F-mPJWf8/exec';
 // ตัวอย่าง: 'https://script.google.com/macros/s/AKfycb.../exec'
 
 const api = {
