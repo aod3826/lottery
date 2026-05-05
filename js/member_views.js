@@ -1,0 +1,301 @@
+// =================================================================
+// member_views.js — Renderers สำหรับ Member (GitHub Pages version)
+// =================================================================
+
+// ---------- Buy Lottery ----------
+function renderBuyLottery(lotteryTypes) {
+  const area = document.getElementById('member-area');
+
+  let activeType = lotteryTypes[0] || null;
+  let betSlip    = [];
+
+  area.innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      <!-- Input panel -->
+      <div class="md:col-span-2 bg-gray-50 p-4 rounded-xl shadow">
+
+        <h3 class="text-lg font-semibold mb-3 text-gray-700">เลือกประเภท</h3>
+        <div class="flex flex-wrap gap-2 mb-4">
+          ${lotteryTypes.map(t => `
+            <button class="btn-type px-4 py-2 rounded-lg font-semibold text-sm transition" data-id="${t.id}">${t.name}</button>
+          `).join('')}
+        </div>
+
+        <input id="inp-number" readonly
+               class="w-full text-center text-3xl font-mono bg-white border-b-2 p-3 mb-4 focus:outline-none rounded"
+               placeholder="—">
+
+        <!-- Keypad -->
+        <div class="grid grid-cols-3 gap-2 mb-4">
+          ${[1,2,3,4,5,6,7,8,9,'ล้าง',0,'ลบ'].map(k => `
+            <button class="btn-key p-4 rounded-lg text-xl font-bold transition
+              ${k === 'ล้าง' || k === 'ลบ' ? 'bg-gray-300 hover:bg-gray-400' : 'bg-green-600 text-white hover:bg-green-700'}"
+              data-key="${k}">${k}</button>
+          `).join('')}
+        </div>
+
+        <!-- Quick amounts -->
+        <div class="flex flex-wrap gap-2 mb-4">
+          ${[5,10,20,50,100,500].map(v => `
+            <button class="btn-amt px-4 py-2 rounded-lg bg-pink-500 text-white font-semibold hover:bg-pink-600"
+              data-amount="${v}">${v}</button>
+          `).join('')}
+        </div>
+
+        <div class="flex gap-3">
+          <input type="number" id="inp-amount" placeholder="จำนวนเงิน (บาท)" min="1"
+                 class="flex-1 p-3 border rounded-lg text-lg outline-none focus:ring-2 focus:ring-green-400">
+          <button id="btn-add" class="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
+            เพิ่ม
+          </button>
+        </div>
+      </div>
+
+      <!-- Bet slip -->
+      <div class="bg-white rounded-xl shadow flex flex-col">
+        <h3 class="text-lg font-semibold p-4 border-b text-center bg-gray-100 rounded-t-xl">รายการซื้อ</h3>
+        <div id="slip-items" class="flex-1 overflow-y-auto max-h-96"></div>
+        <div id="slip-summary" class="border-t"></div>
+      </div>
+    </div>`;
+
+  // ---- Helpers ----
+  const numInput = area.querySelector('#inp-number');
+  const amtInput = area.querySelector('#inp-amount');
+
+  function setType(id) {
+    activeType = lotteryTypes.find(t => t.id === id) || activeType;
+    area.querySelectorAll('.btn-type').forEach(b => {
+      const active = b.dataset.id === id;
+      b.className = `btn-type px-4 py-2 rounded-lg font-semibold text-sm transition ${
+        active ? 'bg-green-700 text-white' : 'bg-gray-200 text-gray-800'
+      }`;
+    });
+    numInput.placeholder = activeType ? `เลข ${activeType.digits} ตัว` : '—';
+    numInput.value = '';
+  }
+
+  function drawSlip() {
+    const items   = area.querySelector('#slip-items');
+    const summary = area.querySelector('#slip-summary');
+
+    if (!betSlip.length) {
+      items.innerHTML   = '<p class="text-center text-gray-400 p-4">ยังไม่มีรายการ</p>';
+      summary.innerHTML = '';
+      return;
+    }
+
+    items.innerHTML = betSlip.map((b, i) => `
+      <div class="flex justify-between items-center p-3 border-b">
+        <div>
+          <p class="text-xs text-gray-500">${b.typeName}</p>
+          <p class="font-mono text-lg font-bold text-green-700">${b.number}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <p class="text-sm">${fmtMoney(b.amount)} บาท</p>
+          <button class="btn-remove text-red-400 hover:text-red-600" data-idx="${i}">
+            <i class="fas fa-trash-alt text-xs"></i>
+          </button>
+        </div>
+      </div>`).join('');
+
+    const total = betSlip.reduce((s, b) => s + b.amount, 0);
+    summary.innerHTML = `
+      <div class="p-3">
+        <div class="flex justify-between font-bold text-lg mb-2">
+          <span>ยอดรวม:</span><span>${fmtMoney(total)} บาท</span>
+        </div>
+        <button id="btn-confirm"
+                class="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700">
+          ยืนยันการซื้อ
+        </button>
+      </div>`;
+  }
+
+  // ---- Event delegation on area ----
+  area.addEventListener('click', function handler(e) {
+    // Type buttons
+    const typeBtn = e.target.closest('.btn-type');
+    if (typeBtn) { setType(typeBtn.dataset.id); return; }
+
+    // Keypad
+    const keyBtn = e.target.closest('.btn-key');
+    if (keyBtn) {
+      const k = keyBtn.dataset.key;
+      if (k === 'ล้าง') numInput.value = '';
+      else if (k === 'ลบ') numInput.value = numInput.value.slice(0, -1);
+      else if (numInput.value.length < (activeType?.digits || 2)) numInput.value += k;
+      return;
+    }
+
+    // Quick amounts
+    const amtBtn = e.target.closest('.btn-amt');
+    if (amtBtn) { amtInput.value = amtBtn.dataset.amount; return; }
+
+    // Add to slip
+    if (e.target.id === 'btn-add') {
+      if (!activeType) return Swal.fire('ผิดพลาด', 'เลือกประเภทสลากก่อน', 'error');
+      const num = numInput.value;
+      const amt = parseFloat(amtInput.value);
+      if (num.length !== parseInt(activeType.digits))
+        return Swal.fire('ผิดพลาด', `ใส่ตัวเลขให้ครบ ${activeType.digits} หลัก`, 'error');
+      if (isNaN(amt) || amt < 1)
+        return Swal.fire('ผิดพลาด', 'จำนวนเงินขั้นต่ำ 1 บาท', 'error');
+      betSlip.push({ lotteryTypeId: activeType.id, typeName: activeType.name, number: num, amount: amt });
+      drawSlip();
+      numInput.value = '';
+      amtInput.value = '';
+      return;
+    }
+
+    // Remove item
+    const rmBtn = e.target.closest('.btn-remove');
+    if (rmBtn) { betSlip.splice(parseInt(rmBtn.dataset.idx), 1); drawSlip(); return; }
+
+    // Confirm
+    if (e.target.id === 'btn-confirm') {
+      const total = betSlip.reduce((s, b) => s + b.amount, 0);
+      Swal.fire({
+        title: 'ยืนยันการซื้อ?', text: `ยอดรวม ${fmtMoney(total)} บาท`,
+        icon: 'question', showCancelButton: true,
+        confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก',
+      }).then(r => {
+        if (!r.isConfirmed) return;
+        loading('กำลังบันทึก...');
+        api.post('recordPurchases', { purchases: betSlip, memberId: App.user.id }).then(res => {
+          if (res.success) {
+            App.user.credit = res.newCredit;
+            refreshTopBar();
+            betSlip = [];
+            Swal.fire('สำเร็จ!', res.message, 'success');
+            loadMember('buy');
+          } else {
+            Swal.fire('ผิดพลาด!', res.message, 'error');
+          }
+        }).catch(err => Swal.fire('ผิดพลาด!', err.message, 'error'));
+      });
+    }
+  }, { once: false });
+
+  setType(activeType?.id);
+  drawSlip();
+}
+
+// ---------- Deposit Form ----------
+function renderDepositForm(accounts) {
+  const area = document.getElementById('member-area');
+  if (!accounts.length) {
+    area.innerHTML = `<div class="bg-red-50 border border-red-300 text-red-700 p-6 rounded-xl">
+      ไม่พบข้อมูลบัญชีธนาคาร กรุณาติดต่อผู้ดูแลระบบ
+    </div>`;
+    return;
+  }
+
+  const acc = accounts[0];
+  area.innerHTML = `
+    <h3 class="text-2xl font-bold text-green-800 mb-6">เติมเครดิต</h3>
+    <div class="max-w-md mx-auto bg-white p-6 rounded-xl shadow-xl">
+
+      <div class="text-center mb-6 border-b pb-4">
+        <p class="text-lg font-bold text-green-700">${acc.bankName} — ${acc.accountNumber}</p>
+        <p class="text-sm text-gray-600">ชื่อบัญชี: ${acc.accountName}</p>
+      </div>
+
+      <div class="flex justify-center mb-6">
+        <img src="${acc.qrCodeUrl}" alt="QR" class="w-44 h-44 border rounded-lg shadow">
+      </div>
+
+      <form id="form-deposit">
+        <input type="hidden" name="memberId"   value="${App.user.id}">
+        <input type="hidden" name="memberName" value="${App.user.name}">
+        <input type="hidden" name="phone"      value="${App.user.phone || ''}">
+
+        <label class="block font-medium text-gray-700 mb-1">ยอดที่ต้องการเติม</label>
+        <select name="amount" class="w-full mb-4 p-3 border rounded-lg outline-none focus:ring-2 focus:ring-green-400" required>
+          <option value="">เลือกยอดเงิน</option>
+          ${[20,50,100,500,1000].map(v => `<option value="${v}">${v} บาท</option>`).join('')}
+        </select>
+
+        <label class="block font-medium text-gray-700 mb-1">แนบสลิปการโอน</label>
+        <input type="file" name="slipFile" accept="image/*"
+               class="w-full mb-6 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer" required>
+
+        <button type="submit" class="w-full bg-green-700 text-white py-3 rounded-lg font-semibold hover:bg-green-800">
+          แจ้งโอนเงิน
+        </button>
+      </form>
+    </div>`;
+}
+
+// ---------- Withdraw Form ----------
+function renderWithdrawForm(area) {
+  const credit = fmtMoney(App.user?.credit);
+  area.innerHTML = `
+    <h3 class="text-2xl font-bold text-green-800 mb-6">ถอนเครดิต</h3>
+    <div class="max-w-md mx-auto bg-white p-6 rounded-xl shadow-xl">
+      <p class="text-lg font-bold mb-4">เครดิตคงเหลือ: <span class="text-red-500">${credit}</span> บาท</p>
+      <form id="form-withdraw">
+        <input type="hidden" name="memberId" value="${App.user?.id}">
+        <label class="block font-medium text-gray-700 mb-1">จำนวนที่ต้องการถอน</label>
+        <input type="number" name="amount" min="1" max="${credit}" required
+               placeholder="ไม่เกิน ${credit} บาท"
+               class="w-full mb-5 p-3 border rounded-lg outline-none focus:ring-2 focus:ring-green-400">
+        <button type="submit" class="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700">
+          ส่งคำขอถอนเงิน
+        </button>
+      </form>
+    </div>`;
+}
+
+// ---------- Purchase History ----------
+function renderPurchaseHistory(area, data) {
+  const totalWin = data.reduce((s, d) => d.Status === 'Won' ? s + d.WinningAmount : s, 0);
+
+  const rows = data.map(d => {
+    let action = '-';
+    if (d.Status === 'Won') {
+      action = d.ClaimedTimestamp
+        ? '<span class="text-xs text-gray-500">รับแล้ว</span>'
+        : `<button class="btn-claim bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600"
+             data-id="${d.PurchaseId}">รับรางวัล</button>`;
+    }
+    return [
+      fmtDate(d.Timestamp),
+      d.LotteryType,
+      `<span class="font-mono font-bold">${d.Number}</span>`,
+      `<span class="font-mono text-blue-600 font-bold">${d.AnnouncedNumber || '-'}</span>`,
+      fmtMoney(d.CreditSpent),
+      d.WinningAmount > 0 ? `<span class="font-bold text-green-600">${fmtMoney(d.WinningAmount)}</span>` : '-',
+      _statusBadge(d.Status),
+      action,
+    ];
+  });
+
+  area.innerHTML = `
+    <h3 class="text-2xl font-bold text-green-800 mb-4">ประวัติการซื้อสลาก</h3>
+    <div class="bg-green-50 border-l-4 border-green-500 text-green-700 p-4 mb-4 rounded-lg">
+      <p class="font-bold">ยอดเงินรางวัลรวม (ยังไม่ได้รับ): ${fmtMoney(totalWin)} บาท</p>
+    </div>
+    ${_tbl(['วันที่','ประเภท','เลขที่ซื้อ','เลขที่ออก','เครดิตที่ใช้','รางวัล','สถานะ','ดำเนินการ'], rows)}`;
+}
+
+// ---------- Transaction History ----------
+function renderTxHistory(area, data) {
+  const rows = data.map(d => {
+    const isDeposit = d.Type === 'Deposit';
+    return [
+      fmtDate(d.timestamp || d.Timestamp),
+      isDeposit ? 'เติมเครดิต' : 'ถอนเครดิต',
+      `<span class="font-bold ${isDeposit ? 'text-green-600' : 'text-red-600'}">${fmtMoney(d.amount || d.Amount)}</span>`,
+      _statusBadge(d.status || d.Status),
+      isDeposit && (d.slipUrl || d.SlipUrl)
+        ? `<a href="${d.slipUrl || d.SlipUrl}" target="_blank" class="text-blue-500 hover:underline text-xs">ดูสลิป</a>`
+        : '-',
+    ];
+  });
+
+  area.innerHTML = `
+    <h3 class="text-2xl font-bold text-green-800 mb-4">ประวัติการเติม/ถอนเครดิต</h3>
+    ${_tbl(['วันที่','รายการ','ยอดเงิน','สถานะ','หลักฐาน'], rows)}`;
+}
